@@ -43,6 +43,12 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
+      - name: Verify container user account
+        run: |
+          docker build --tag instasync:test .
+          docker run --rm --entrypoint python instasync:test -c \
+            "from instaloader.instaloader import get_legacy_session_filename; assert get_legacy_session_filename('hallveticapro') == '/tmp/.instaloader-instasync/session-hallveticapro'"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
 

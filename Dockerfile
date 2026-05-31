@@ -7,10 +7,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
 
-RUN mkdir -p /data/cache \
-    && chown -R 99:100 /app /data
+RUN if ! getent group 100 >/dev/null; then groupadd --gid 100 instasync; fi \
+    && useradd --uid 99 --gid 100 --create-home --home-dir /home/instasync \
+        --shell /usr/sbin/nologin instasync \
+    && mkdir -p /data/cache \
+    && chown -R 99:100 /app /data /home/instasync
 
-USER 99:100
+USER instasync
 
 EXPOSE 9000
 

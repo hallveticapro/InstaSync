@@ -156,6 +156,17 @@ Do not add a profile target to this one-time login command. For example,
 `instaloader instagram` is an anonymous profile download, not a session setup
 check, and Instagram may reject its GraphQL request with `403 Forbidden`.
 
+To test a profile download with the persisted authenticated session, always pass
+the same `/data` session path explicitly:
+
+```bash
+docker exec -it InstaSync \
+  instaloader \
+  --login=hallveticapro \
+  --sessionfile=/data/session-hallveticapro \
+  instagram
+```
+
 Confirm that the file exists on the Unraid host before editing or recreating the
 container:
 
