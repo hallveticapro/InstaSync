@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from app.main import (
     INSTAGRAM_PROFILE_INFO_URL,
     InstaloaderProfileResolver,
+    ProfileImageService,
     ProfileNotFound,
     Settings,
     UpstreamError,
@@ -60,6 +61,20 @@ class FakeSession:
         self.calls.append((url, kwargs))
         assert self.responses, f"Unexpected GET request for {url}"
         return self.responses.popleft()
+
+
+class FakeLoader:
+    def __init__(self) -> None:
+        self.context = object()
+        self.load_session_calls: list[tuple[str, str | None]] = []
+
+    def load_session_from_file(
+        self, username: str, filename: str | None = None
+    ) -> None:
+        self.load_session_calls.append((username, filename))
+
+    def save_session(self) -> dict[str, str]:
+        return {"csrftoken": "csrf-token", "sessionid": "session-id"}
 
 
 class FakeInstaloaderResolver:
@@ -191,6 +206,27 @@ def test_stale_cached_image_is_returned_when_refresh_fails(tmp_path: Path) -> No
     assert response.headers["x-cache"] == "STALE"
 
 
+def test_stale_cached_image_is_returned_when_refresh_is_rate_limited(
+    tmp_path: Path,
+) -> None:
+    client, _ = make_client(
+        tmp_path,
+        [
+            metadata_response(),
+            image_response(),
+            FakeResponse(status_code=429, headers={"Retry-After": "900"}),
+        ],
+    )
+    assert client.get("/insta/instagram").status_code == 200
+    expire_cache(tmp_path, "instagram")
+
+    response = client.get("/insta/instagram")
+
+    assert response.status_code == 200
+    assert response.content == JPEG_BYTES
+    assert response.headers["x-cache"] == "STALE"
+
+
 def test_invalid_username_is_rejected_without_upstream_request(tmp_path: Path) -> None:
     client, session = make_client(tmp_path, [])
 
@@ -224,6 +260,21 @@ def test_malformed_upstream_response_returns_502(tmp_path: Path) -> None:
     assert response.status_code == 502
 
 
+def test_rate_limited_upstream_returns_503_with_retry_after(tmp_path: Path) -> None:
+    client, _ = make_client(
+        tmp_path,
+        [FakeResponse(status_code=429, headers={"Retry-After": "900"})],
+    )
+
+    response = client.get("/insta/instagram")
+
+    assert response.status_code == 503
+    assert response.headers["retry-after"] == "900"
+    assert response.json() == {
+        "detail": "Instagram rate limit reached; try again later"
+    }
+
+
 def test_unrecognized_image_bytes_return_502(tmp_path: Path) -> None:
     client, _ = make_client(
         tmp_path, [metadata_response(), image_response(content=b"not-an-image")]
@@ -245,6 +296,44 @@ def test_instaloader_resolver_uses_best_profile_picture_url(
     resolver = InstaloaderProfileResolver(loader=SimpleNamespace(context=object()))
 
     assert resolver.get_profile_image_url("instagram") == INSTALOADER_HD_URL
+
+
+def test_instaloader_resolver_loads_configured_session_file(tmp_path: Path) -> None:
+    loader = FakeLoader()
+    session_file = tmp_path / "session-hallveticapro"
+
+    InstaloaderProfileResolver(
+        loader=loader,
+        instagram_username="hallveticapro",
+        session_file=session_file,
+    )
+
+    assert loader.load_session_calls == [("hallveticapro", str(session_file))]
+
+
+def test_loaded_instaloader_session_authenticates_fallback_requests(
+    tmp_path: Path,
+) -> None:
+    resolver = InstaloaderProfileResolver(
+        loader=FakeLoader(),
+        instagram_username="hallveticapro",
+        session_file=tmp_path / "session-hallveticapro",
+    )
+    session = FakeSession([metadata_response()])
+    service = ProfileImageService(Settings(cache_dir=tmp_path), session, resolver)
+
+    assert service._get_web_profile_image_url("instagram") == HD_URL
+
+    assert session.calls[0][1]["cookies"] == {
+        "csrftoken": "csrf-token",
+        "sessionid": "session-id",
+    }
+    assert session.calls[0][1]["headers"]["X-CSRFToken"] == "csrf-token"
+
+
+def test_settings_require_session_username_and_file_together(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="must be configured together"):
+        Settings(cache_dir=tmp_path, instagram_username="hallveticapro")
 
 
 def test_instaloader_private_profile_does_not_use_fallback(tmp_path: Path) -> None:

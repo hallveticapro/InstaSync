@@ -28,7 +28,8 @@ Instaloader's highest-quality `Profile.profile_pic_url` exactly as returned. If
 Instaloader cannot resolve the profile, InstaSync falls back to Instagram's
 undocumented `web_profile_info` endpoint. The compatibility fallback prefers
 `profile_pic_url_hd` and uses `profile_pic_url` only when the HD field is absent.
-Signed CDN URLs are never rewritten.
+When a session file is configured, both adapters use its cookies. Signed CDN
+URLs are never rewritten.
 
 Responses include an `X-Cache` header:
 
@@ -51,8 +52,13 @@ GET /healthz
 | `CACHE_DIR` | `/data/cache` | Persistent image-cache directory. |
 | `CACHE_TTL_SECONDS` | `86400` | Cache freshness window in seconds. |
 | `INSTAGRAM_APP_ID` | `936619743392459` | Public Instagram web app ID sent by the compatibility fallback. |
+| `INSTAGRAM_USERNAME` | unset | Optional Instagram account whose Instaloader session should be loaded. |
+| `INSTALOADER_SESSION_FILE` | unset | Optional mounted Instaloader session file, such as `/data/session-hallveticapro`. |
 | `REQUEST_TIMEOUT_SECONDS` | `15` | Timeout for Instaloader, fallback metadata, and image requests. |
 | `MAX_IMAGE_BYTES` | `10485760` | Maximum accepted profile-picture size. |
+
+Set `INSTAGRAM_USERNAME` and `INSTALOADER_SESSION_FILE` together or leave both
+unset. The session file contains reusable cookies, not your Instagram password.
 
 ## Publish To GHCR
 
@@ -100,6 +106,41 @@ curl http://<unraid-ip>:9000/healthz
 curl -o profile.jpg http://<unraid-ip>:9000/insta/instagram
 ```
 
+### Configure An Instaloader Session
+
+Anonymous Instagram requests can be rate-limited aggressively. If the container
+logs show Instagram `429` responses, create a logged-in Instaloader session once:
+
+```bash
+docker exec -it InstaSync \
+  instaloader \
+  --login=hallveticapro \
+  --sessionfile=/data/session-hallveticapro
+```
+
+Enter the password and two-factor code interactively if prompted. Instaloader
+stores session cookies in `/mnt/user/appdata/instasync/session-hallveticapro`
+through the existing `/data` volume mapping.
+
+The loaded cookies authenticate the primary Instaloader lookup and the
+`web_profile_info` compatibility fallback.
+
+Then edit the Unraid container and add:
+
+| Variable | Value |
+| --- | --- |
+| `INSTAGRAM_USERNAME` | `hallveticapro` |
+| `INSTALOADER_SESSION_FILE` | `/data/session-hallveticapro` |
+
+Apply the container update and check the logs for:
+
+```text
+Loaded Instaloader session for hallveticapro
+```
+
+Do not publish or share the session file. If Instagram expires the session,
+repeat the one-time `docker exec` command.
+
 ## Expose With Nginx Proxy Manager
 
 This setup assumes Nginx Proxy Manager is already running and your DNS record
@@ -145,6 +186,10 @@ Instagram may change Instaloader-facing behavior without notice, and the
 `web_profile_info` compatibility fallback is undocumented. The persistent cache
 and stale-image fallback reduce disruption, but a future Instagram change may
 require an adapter update.
+
+If both upstream adapters are rate-limited and no cached picture exists, the API
+returns `503 Service Unavailable` with a `Retry-After` header. A stale cached
+picture remains available during temporary upstream failures.
 
 ## Attribution
 

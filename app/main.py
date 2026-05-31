@@ -39,6 +39,14 @@ class UpstreamError(Exception):
     """Raised when Instagram or its CDN cannot provide a usable image."""
 
 
+class UpstreamRateLimited(UpstreamError):
+    """Raised when Instagram temporarily rate-limits an upstream request."""
+
+    def __init__(self, message: str, retry_after_seconds: int = 300) -> None:
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
+
+
 class CacheError(Exception):
     """Raised when a cache file cannot be stored."""
 
@@ -68,6 +76,16 @@ class Settings:
     instagram_app_id: str = field(
         default_factory=lambda: os.getenv("INSTAGRAM_APP_ID", DEFAULT_INSTAGRAM_APP_ID)
     )
+    instagram_username: str | None = field(
+        default_factory=lambda: os.getenv("INSTAGRAM_USERNAME") or None
+    )
+    instaloader_session_file: Path | None = field(
+        default_factory=lambda: (
+            Path(session_file)
+            if (session_file := os.getenv("INSTALOADER_SESSION_FILE"))
+            else None
+        )
+    )
     request_timeout_seconds: float = field(
         default_factory=lambda: _positive_float_from_env("REQUEST_TIMEOUT_SECONDS", 15.0)
     )
@@ -76,6 +94,12 @@ class Settings:
             "MAX_IMAGE_BYTES", 10 * 1024 * 1024
         )
     )
+
+    def __post_init__(self) -> None:
+        if bool(self.instagram_username) != bool(self.instaloader_session_file):
+            raise ValueError(
+                "INSTAGRAM_USERNAME and INSTALOADER_SESSION_FILE must be configured together"
+            )
 
 
 @dataclass(frozen=True)
@@ -94,12 +118,30 @@ class InstaloaderProfileResolver:
         self,
         loader: Instaloader | None = None,
         request_timeout_seconds: float = 15.0,
+        instagram_username: str | None = None,
+        session_file: Path | None = None,
     ) -> None:
         self.loader = loader or Instaloader(
             quiet=True,
             max_connection_attempts=1,
             request_timeout=request_timeout_seconds,
         )
+        self._session_cookies: dict[str, str] = {}
+        if instagram_username and session_file:
+            try:
+                self.loader.load_session_from_file(
+                    instagram_username,
+                    filename=str(session_file),
+                )
+                self._session_cookies = self.loader.save_session()
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Unable to load Instaloader session file: {session_file}"
+                ) from exc
+            logger.info("Loaded Instaloader session for %s", instagram_username)
+
+    def get_session_cookies(self) -> dict[str, str]:
+        return self._session_cookies.copy()
 
     def get_profile_image_url(self, username: str) -> str:
         try:
@@ -157,7 +199,15 @@ class ProfileImageService:
         self.settings = settings
         self.session = session or requests.Session()
         self.instaloader_resolver = instaloader_resolver or InstaloaderProfileResolver(
-            request_timeout_seconds=settings.request_timeout_seconds
+            request_timeout_seconds=settings.request_timeout_seconds,
+            instagram_username=settings.instagram_username,
+            session_file=settings.instaloader_session_file,
+        )
+        get_session_cookies = getattr(
+            self.instaloader_resolver, "get_session_cookies", None
+        )
+        self._fallback_session_cookies = (
+            get_session_cookies() if callable(get_session_cookies) else {}
         )
         self._locks: dict[str, threading.Lock] = {}
         self._locks_guard = threading.Lock()
@@ -205,14 +255,19 @@ class ProfileImageService:
             return self._get_web_profile_image_url(username)
 
     def _get_web_profile_image_url(self, username: str) -> str:
+        headers = {
+            "X-IG-App-ID": self.settings.instagram_app_id,
+            "User-Agent": DEFAULT_USER_AGENT,
+        }
+        if csrf_token := self._fallback_session_cookies.get("csrftoken"):
+            headers["X-CSRFToken"] = csrf_token
+
         try:
             response = self.session.get(
                 INSTAGRAM_PROFILE_INFO_URL,
                 params={"username": username},
-                headers={
-                    "X-IG-App-ID": self.settings.instagram_app_id,
-                    "User-Agent": DEFAULT_USER_AGENT,
-                },
+                headers=headers,
+                cookies=self._fallback_session_cookies or None,
                 timeout=self.settings.request_timeout_seconds,
             )
         except requests.RequestException as exc:
@@ -220,6 +275,11 @@ class ProfileImageService:
 
         if response.status_code == 404:
             raise ProfileNotFound(username)
+        if response.status_code == 429:
+            raise UpstreamRateLimited(
+                "Instagram metadata request was rate-limited",
+                _retry_after_seconds(response),
+            )
         if not response.ok:
             raise UpstreamError(
                 f"Instagram metadata request returned {response.status_code}"
@@ -254,6 +314,11 @@ class ProfileImageService:
                 timeout=self.settings.request_timeout_seconds,
             ) as response:
                 if not response.ok:
+                    if response.status_code == 429:
+                        raise UpstreamRateLimited(
+                            "Instagram image request was rate-limited",
+                            _retry_after_seconds(response),
+                        )
                     raise UpstreamError(
                         f"Instagram image request returned {response.status_code}"
                     )
@@ -355,7 +420,7 @@ def create_app(
 ) -> FastAPI:
     resolved_settings = settings or Settings()
     service = ProfileImageService(resolved_settings, session, instaloader_resolver)
-    application = FastAPI(title="InstaSync", version="1.1.0")
+    application = FastAPI(title="InstaSync", version="1.2.0")
 
     @application.get("/healthz")
     def healthcheck() -> dict[str, str]:
@@ -375,6 +440,13 @@ def create_app(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except ProfileNotFound as exc:
             raise HTTPException(status_code=404, detail="Profile not found") from exc
+        except UpstreamRateLimited as exc:
+            logger.warning("Instagram rate-limited profile picture fetch for %s", username)
+            raise HTTPException(
+                status_code=503,
+                detail="Instagram rate limit reached; try again later",
+                headers={"Retry-After": str(exc.retry_after_seconds)},
+            ) from exc
         except UpstreamError as exc:
             logger.warning("Unable to fetch profile picture for %s: %s", username, exc)
             raise HTTPException(
@@ -389,6 +461,13 @@ def create_app(
             ) from exc
 
     return application
+
+
+def _retry_after_seconds(response: requests.Response) -> int:
+    try:
+        return max(1, int(response.headers.get("Retry-After", "300")))
+    except ValueError:
+        return 300
 
 
 app = create_app()
