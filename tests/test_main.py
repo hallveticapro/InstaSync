@@ -289,6 +289,22 @@ def test_rate_limited_upstream_returns_503_with_retry_after(tmp_path: Path) -> N
     }
 
 
+def test_rate_limit_retry_window_prevents_repeated_upstream_requests(
+    tmp_path: Path,
+) -> None:
+    client, session = make_client(
+        tmp_path,
+        [FakeResponse(status_code=429, headers={"Retry-After": "900"})],
+    )
+    assert client.get("/insta/instagram").status_code == 503
+
+    response = client.get("/insta/github")
+
+    assert response.status_code == 503
+    assert 1 <= int(response.headers["retry-after"]) <= 900
+    assert len(session.calls) == 1
+
+
 def test_unrecognized_image_bytes_return_502(tmp_path: Path) -> None:
     client, _ = make_client(
         tmp_path, [metadata_response(), image_response(content=b"not-an-image")]

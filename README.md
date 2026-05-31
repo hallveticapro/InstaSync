@@ -274,7 +274,9 @@ so image builds remain reproducible while the upstream pull request is open.
 
 If both upstream adapters are rate-limited and no cached picture exists, the API
 returns `503 Service Unavailable` with a `Retry-After` header. A stale cached
-picture remains available during temporary upstream failures.
+picture remains available during temporary upstream failures. During an
+Instagram `Retry-After` window, the service serves cached images and rejects
+uncached requests immediately instead of repeatedly querying Instagram.
 
 ## Attribution
 

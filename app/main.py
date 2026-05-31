@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import re
 import tempfile
@@ -216,6 +217,8 @@ class ProfileImageService:
         self.instaloader_session_loaded = bool(
             getattr(self.instaloader_resolver, "session_loaded", False)
         )
+        self._upstream_retry_after_until = 0.0
+        self._upstream_retry_after_guard = threading.Lock()
         self._locks: dict[str, threading.Lock] = {}
         self._locks_guard = threading.Lock()
 
@@ -230,8 +233,19 @@ class ProfileImageService:
                 return entry, "HIT"
 
             try:
+                self._raise_if_upstream_retry_window_active()
                 return self._refresh(username), "MISS"
             except ProfileNotFound:
+                raise
+            except UpstreamRateLimited as exc:
+                self._record_upstream_retry_window(exc.retry_after_seconds)
+                stale_entry = self._read_cache_entry(username)
+                if stale_entry:
+                    logger.warning(
+                        "Serving stale cached image for %s during Instagram retry window",
+                        username,
+                    )
+                    return stale_entry, "STALE"
                 raise
             except UpstreamError:
                 stale_entry = self._read_cache_entry(username)
@@ -243,6 +257,25 @@ class ProfileImageService:
                     )
                     return stale_entry, "STALE"
                 raise
+
+    def _raise_if_upstream_retry_window_active(self) -> None:
+        with self._upstream_retry_after_guard:
+            retry_after_seconds = math.ceil(
+                self._upstream_retry_after_until - time.time()
+            )
+        if retry_after_seconds > 0:
+            raise UpstreamRateLimited(
+                "Instagram retry window is active",
+                retry_after_seconds,
+            )
+
+    def _record_upstream_retry_window(self, retry_after_seconds: int) -> None:
+        retry_after_until = time.time() + retry_after_seconds
+        with self._upstream_retry_after_guard:
+            self._upstream_retry_after_until = max(
+                self._upstream_retry_after_until,
+                retry_after_until,
+            )
 
     def _refresh(self, username: str) -> CacheEntry:
         image_url = self._resolve_profile_image_url(username)
