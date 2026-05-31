@@ -1,0 +1,2 @@
+"""InstaSync application package."""
+
