@@ -207,6 +207,21 @@ docker exec InstaSync python scripts/import_instagram_session.py \
   --output=/data/session-hallveticapro
 ```
 
+If the main container cannot stay running because an older session file is
+invalid, use a one-shot container against the same Unraid appdata directory:
+
+```bash
+docker run --rm \
+  --volume /mnt/user/appdata/instasync:/data \
+  --entrypoint python \
+  ghcr.io/hallveticapro/instasync:latest \
+  scripts/import_instagram_session.py \
+  --cookies-json-file=/data/instagram-cookies.json \
+  --output=/data/session-hallveticapro
+```
+
+Delete the temporary JSON secret file after importing it.
+
 Do not add a profile target to this one-time login command. For example,
 `instaloader instagram` is an anonymous profile download, not a session setup
 check, and Instagram may reject its GraphQL request with `403 Forbidden`.
