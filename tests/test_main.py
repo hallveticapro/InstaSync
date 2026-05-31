@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 from collections import deque
 from dataclasses import dataclass, field
@@ -9,6 +10,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from instaloader import Profile as InstalledInstaloaderProfile
 
 from app.main import (
     INSTAGRAM_PROFILE_INFO_URL,
@@ -124,6 +126,14 @@ def test_healthcheck(tmp_path: Path) -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_instaloader_dependency_contains_profile_metadata_query_fix() -> None:
+    source = inspect.getsource(InstalledInstaloaderProfile._obtain_metadata)
+
+    assert "27937681195819736" in source
+    assert "PolarisWebSchoolsEnabledrelayprovider" in source
+    assert "enable_integrity_filters" in source
 
 
 def test_instaloader_image_is_preferred_and_username_is_normalized(

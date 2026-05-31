@@ -138,7 +138,8 @@ curl -o profile.jpg http://<unraid-ip>:9000/insta/instagram
 
 Anonymous Instagram requests can be rate-limited aggressively. If the container
 logs show Instagram `429` responses, first verify the `/data` bind mount as
-described above. Then create a logged-in Instaloader session once:
+described above. Leave `INSTAGRAM_USERNAME` and `INSTALOADER_SESSION_FILE` unset
+until the session file exists, then create a logged-in Instaloader session once:
 
 ```bash
 docker exec -it InstaSync \
@@ -150,6 +151,10 @@ docker exec -it InstaSync \
 Enter the password and two-factor code interactively if prompted. Instaloader
 stores session cookies in `/mnt/user/appdata/instasync/session-hallveticapro`
 through the existing `/data` volume mapping.
+
+Do not add a profile target to this one-time login command. For example,
+`instaloader instagram` is an anonymous profile download, not a session setup
+check, and Instagram may reject its GraphQL request with `403 Forbidden`.
 
 Confirm that the file exists on the Unraid host before editing or recreating the
 container:
@@ -236,6 +241,13 @@ Instagram may change Instaloader-facing behavior without notice, and the
 `web_profile_info` compatibility fallback is undocumented. The persistent cache
 and stale-image fallback reduce disruption, but a future Instagram change may
 require an adapter update.
+
+The container temporarily installs the immutable Instaloader patch from
+[PR #2696](https://github.com/instaloader/instaloader/pull/2696) to match
+Instagram's current profile-metadata GraphQL document ID and flags. The patch is
+pinned to commit
+[`4a7ac19d`](https://github.com/npiriou/instaloader/commit/4a7ac19d8ae1ab19e3ef896f2d32a08c2b107613)
+so image builds remain reproducible while the upstream pull request is open.
 
 If both upstream adapters are rate-limited and no cached picture exists, the API
 returns `503 Service Unavailable` with a `Retry-After` header. A stale cached
