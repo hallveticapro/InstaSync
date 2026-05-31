@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse
 from instaloader import Instaloader, Profile as InstaloaderProfile
 from instaloader.exceptions import InstaloaderException
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("uvicorn.error")
 
 INSTAGRAM_PROFILE_INFO_URL = "https://www.instagram.com/api/v1/users/web_profile_info/"
 DEFAULT_INSTAGRAM_APP_ID = "936619743392459"
@@ -127,6 +127,7 @@ class InstaloaderProfileResolver:
             request_timeout=request_timeout_seconds,
         )
         self._session_cookies: dict[str, str] = {}
+        self.session_loaded = False
         if instagram_username and session_file:
             try:
                 self.loader.load_session_from_file(
@@ -134,10 +135,13 @@ class InstaloaderProfileResolver:
                     filename=str(session_file),
                 )
                 self._session_cookies = self.loader.save_session()
+                if not self._session_cookies:
+                    raise ValueError("session file did not contain cookies")
             except Exception as exc:
                 raise RuntimeError(
                     f"Unable to load Instaloader session file: {session_file}"
                 ) from exc
+            self.session_loaded = True
             logger.info("Loaded Instaloader session for %s", instagram_username)
 
     def get_session_cookies(self) -> dict[str, str]:
@@ -208,6 +212,9 @@ class ProfileImageService:
         )
         self._fallback_session_cookies = (
             get_session_cookies() if callable(get_session_cookies) else {}
+        )
+        self.instaloader_session_loaded = bool(
+            getattr(self.instaloader_resolver, "session_loaded", False)
         )
         self._locks: dict[str, threading.Lock] = {}
         self._locks_guard = threading.Lock()
@@ -424,7 +431,12 @@ def create_app(
 
     @application.get("/healthz")
     def healthcheck() -> dict[str, str]:
-        return {"status": "ok"}
+        return {
+            "status": "ok",
+            "instaloader_session": (
+                "loaded" if service.instaloader_session_loaded else "not_configured"
+            ),
+        }
 
     @application.get("/insta/{username}")
     def get_instagram_profile_picture(username: str) -> FileResponse:

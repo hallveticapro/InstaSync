@@ -125,7 +125,10 @@ def test_healthcheck(tmp_path: Path) -> None:
     response = client.get("/healthz")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json() == {
+        "status": "ok",
+        "instaloader_session": "not_configured",
+    }
 
 
 def test_instaloader_dependency_contains_profile_metadata_query_fix() -> None:
@@ -320,6 +323,23 @@ def test_instaloader_resolver_loads_configured_session_file(tmp_path: Path) -> N
     )
 
     assert loader.load_session_calls == [("hallveticapro", str(session_file))]
+
+
+def test_healthcheck_reports_loaded_instaloader_session(tmp_path: Path) -> None:
+    resolver = InstaloaderProfileResolver(
+        loader=FakeLoader(),
+        instagram_username="hallveticapro",
+        session_file=tmp_path / "session-hallveticapro",
+    )
+    client = TestClient(create_app(Settings(cache_dir=tmp_path), FakeSession([]), resolver))
+
+    response = client.get("/healthz")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ok",
+        "instaloader_session": "loaded",
+    }
 
 
 def test_loaded_instaloader_session_authenticates_fallback_requests(

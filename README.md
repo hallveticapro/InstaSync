@@ -179,6 +179,18 @@ Apply the container update and check the logs for:
 Loaded Instaloader session for hallveticapro
 ```
 
+You can also verify the loaded state without relying on log history:
+
+```bash
+curl http://<unraid-ip>:9000/healthz
+```
+
+The response should include:
+
+```json
+{"status":"ok","instaloader_session":"loaded"}
+```
+
 Do not publish or share the session file. If Instagram expires the session,
 repeat the one-time `docker exec` command.
 
