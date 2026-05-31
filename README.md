@@ -1,9 +1,9 @@
 # InstaSync
 
-InstaSync is a small self-hosted API for downloading the highest-quality public
-Instagram profile picture exposed by Instagram's web profile metadata endpoint.
-It is designed to replace the unavailable API used by an Apple Shortcut and to
-run as a Docker container on Unraid.
+InstaSync is a small self-hosted API for downloading the highest-quality
+available public Instagram profile picture. It is designed to replace the
+unavailable API used by an Apple Shortcut and to run as a Docker container on
+Unraid.
 
 ## API
 
@@ -23,9 +23,12 @@ The service normalizes usernames to lowercase and accepts Instagram-style
 usernames containing letters, numbers, underscores, and non-consecutive periods.
 Private profiles are not supported.
 
-InstaSync requests Instagram's undocumented `web_profile_info` endpoint and uses
-`profile_pic_url_hd` exactly as returned. If Instagram omits that field, the
-service falls back to `profile_pic_url`. Signed CDN URLs are never rewritten.
+InstaSync resolves each uncached profile through Instaloader first and uses
+Instaloader's highest-quality `Profile.profile_pic_url` exactly as returned. If
+Instaloader cannot resolve the profile, InstaSync falls back to Instagram's
+undocumented `web_profile_info` endpoint. The compatibility fallback prefers
+`profile_pic_url_hd` and uses `profile_pic_url` only when the HD field is absent.
+Signed CDN URLs are never rewritten.
 
 Responses include an `X-Cache` header:
 
@@ -47,8 +50,8 @@ GET /healthz
 | --- | --- | --- |
 | `CACHE_DIR` | `/data/cache` | Persistent image-cache directory. |
 | `CACHE_TTL_SECONDS` | `86400` | Cache freshness window in seconds. |
-| `INSTAGRAM_APP_ID` | `936619743392459` | Public Instagram web app ID sent with metadata requests. |
-| `REQUEST_TIMEOUT_SECONDS` | `15` | Timeout for metadata and image requests. |
+| `INSTAGRAM_APP_ID` | `936619743392459` | Public Instagram web app ID sent by the compatibility fallback. |
+| `REQUEST_TIMEOUT_SECONDS` | `15` | Timeout for Instaloader, fallback metadata, and image requests. |
 | `MAX_IMAGE_BYTES` | `10485760` | Maximum accepted profile-picture size. |
 
 ## Publish To GHCR
@@ -138,9 +141,10 @@ mkdir -p .data/cache
 CACHE_DIR=.data/cache uvicorn app.main:app --host 0.0.0.0 --port 9000
 ```
 
-Instagram's `web_profile_info` endpoint is undocumented and may change without
-notice. The persistent cache and stale-image fallback reduce disruption, but a
-future Instagram change may require an adapter update.
+Instagram may change Instaloader-facing behavior without notice, and the
+`web_profile_info` compatibility fallback is undocumented. The persistent cache
+and stale-image fallback reduce disruption, but a future Instagram change may
+require an adapter update.
 
 ## Attribution
 
@@ -149,4 +153,3 @@ inspired by the behavior of
 [AlexisTonneau/currency-converter](https://github.com/AlexisTonneau/currency-converter).
 No source code was copied from that repository because it does not include a
 redistribution license.
-

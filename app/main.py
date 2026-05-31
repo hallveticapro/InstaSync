@@ -9,12 +9,14 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 from urllib.parse import urlparse
 
 import requests
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
+from instaloader import Instaloader, Profile as InstaloaderProfile
+from instaloader.exceptions import InstaloaderException
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +85,40 @@ class CacheEntry:
     fetched_at: float
 
 
+class ProfileImageUrlResolver(Protocol):
+    def get_profile_image_url(self, username: str) -> str: ...
+
+
+class InstaloaderProfileResolver:
+    def __init__(
+        self,
+        loader: Instaloader | None = None,
+        request_timeout_seconds: float = 15.0,
+    ) -> None:
+        self.loader = loader or Instaloader(
+            quiet=True,
+            max_connection_attempts=1,
+            request_timeout=request_timeout_seconds,
+        )
+
+    def get_profile_image_url(self, username: str) -> str:
+        try:
+            profile = InstaloaderProfile.from_username(self.loader.context, username)
+            if profile.is_private:
+                raise ProfileNotFound(username)
+            image_url = str(profile.profile_pic_url)
+        except ProfileNotFound:
+            raise
+        except InstaloaderException as exc:
+            raise UpstreamError("Instaloader profile lookup failed") from exc
+        except Exception as exc:
+            raise UpstreamError("Instaloader returned unusable profile metadata") from exc
+
+        if not _is_allowed_image_url(image_url):
+            raise UpstreamError("Instaloader did not return a safe image URL")
+        return image_url
+
+
 def normalize_username(username: str) -> str:
     normalized = username.strip().lower()
     if not USERNAME_PATTERN.fullmatch(normalized):
@@ -116,9 +152,13 @@ class ProfileImageService:
         self,
         settings: Settings,
         session: requests.Session | None = None,
+        instaloader_resolver: ProfileImageUrlResolver | None = None,
     ) -> None:
         self.settings = settings
         self.session = session or requests.Session()
+        self.instaloader_resolver = instaloader_resolver or InstaloaderProfileResolver(
+            request_timeout_seconds=settings.request_timeout_seconds
+        )
         self._locks: dict[str, threading.Lock] = {}
         self._locks_guard = threading.Lock()
 
@@ -148,10 +188,23 @@ class ProfileImageService:
                 raise
 
     def _refresh(self, username: str) -> CacheEntry:
-        image_url = self._get_profile_image_url(username)
+        image_url = self._resolve_profile_image_url(username)
         return self._download_image(username, image_url)
 
-    def _get_profile_image_url(self, username: str) -> str:
+    def _resolve_profile_image_url(self, username: str) -> str:
+        try:
+            return self.instaloader_resolver.get_profile_image_url(username)
+        except ProfileNotFound:
+            raise
+        except UpstreamError as exc:
+            logger.warning(
+                "Instaloader lookup failed for %s (%s); falling back to web_profile_info",
+                username,
+                exc,
+            )
+            return self._get_web_profile_image_url(username)
+
+    def _get_web_profile_image_url(self, username: str) -> str:
         try:
             response = self.session.get(
                 INSTAGRAM_PROFILE_INFO_URL,
@@ -298,10 +351,11 @@ class ProfileImageService:
 def create_app(
     settings: Settings | None = None,
     session: requests.Session | None = None,
+    instaloader_resolver: ProfileImageUrlResolver | None = None,
 ) -> FastAPI:
     resolved_settings = settings or Settings()
-    service = ProfileImageService(resolved_settings, session)
-    application = FastAPI(title="InstaSync", version="1.0.0")
+    service = ProfileImageService(resolved_settings, session, instaloader_resolver)
+    application = FastAPI(title="InstaSync", version="1.1.0")
 
     @application.get("/healthz")
     def healthcheck() -> dict[str, str]:
