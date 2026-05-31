@@ -16,7 +16,7 @@ from scripts.import_instagram_session import (
 def test_write_session_file_persists_cookies_with_private_permissions(
     tmp_path: Path,
 ) -> None:
-    path = tmp_path / "session-hallveticapro"
+    path = tmp_path / "session-exampleuser"
 
     write_session_file(path, {"sessionid": "secret", "csrftoken": "csrf"})
 
@@ -30,7 +30,7 @@ def test_write_session_file_persists_cookies_with_private_permissions(
 
 def test_write_session_file_requires_sessionid(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="sessionid is required"):
-        write_session_file(tmp_path / "session-hallveticapro", {"csrftoken": "csrf"})
+        write_session_file(tmp_path / "session-exampleuser", {"csrftoken": "csrf"})
 
 
 def test_cookies_from_environment_reads_non_empty_supported_values() -> None:

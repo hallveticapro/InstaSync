@@ -70,7 +70,7 @@ def main() -> None:
         "--output",
         required=True,
         type=Path,
-        help="Session file path, such as /data/session-hallveticapro.",
+        help="Session file path, such as /data/session-your-instagram-username.",
     )
     input_group = parser.add_mutually_exclusive_group()
     input_group.add_argument(

@@ -47,7 +47,7 @@ jobs:
         run: |
           docker build --tag instasync:test .
           docker run --rm --entrypoint python instasync:test -c \
-            "import inspect; from instaloader.instaloader import get_legacy_session_filename; from instaloader.instaloadercontext import InstaloaderContext; assert get_legacy_session_filename('hallveticapro') == '/tmp/.instaloader-instasync/session-hallveticapro'; assert \"'sessionid': ''\" not in inspect.getsource(InstaloaderContext.login)"
+            "import inspect; from instaloader.instaloader import get_legacy_session_filename; from instaloader.instaloadercontext import InstaloaderContext; assert get_legacy_session_filename('exampleuser') == '/tmp/.instaloader-instasync/session-exampleuser'; assert \"'sessionid': ''\" not in inspect.getsource(InstaloaderContext.login)"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3

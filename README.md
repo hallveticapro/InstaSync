@@ -54,7 +54,7 @@ GET /healthz
 | `CACHE_TTL_SECONDS` | `86400` | Cache freshness window in seconds. |
 | `INSTAGRAM_APP_ID` | `936619743392459` | Public Instagram web app ID sent by the compatibility fallback. |
 | `INSTAGRAM_USERNAME` | unset | Optional Instagram account whose Instaloader session should be loaded. |
-| `INSTALOADER_SESSION_FILE` | unset | Optional mounted Instaloader session file, such as `/data/session-hallveticapro`. |
+| `INSTALOADER_SESSION_FILE` | unset | Optional mounted Instaloader session file, such as `/data/session-your-instagram-username`. |
 | `REQUEST_TIMEOUT_SECONDS` | `15` | Timeout for Instaloader, fallback metadata, and image requests. |
 | `MAX_IMAGE_BYTES` | `10485760` | Maximum accepted profile-picture size. |
 
@@ -144,13 +144,14 @@ until the session file exists, then create a logged-in Instaloader session once:
 ```bash
 docker exec -it InstaSync \
   instaloader \
-  --login=hallveticapro \
-  --sessionfile=/data/session-hallveticapro
+  --login=your-instagram-username \
+  --sessionfile=/data/session-your-instagram-username
 ```
 
 Enter the password and two-factor code interactively if prompted. Instaloader
-stores session cookies in `/mnt/user/appdata/instasync/session-hallveticapro`
-through the existing `/data` volume mapping.
+stores session cookies in
+`/mnt/user/appdata/instasync/session-your-instagram-username` through the
+existing `/data` volume mapping.
 
 The image includes a compatibility patch for
 [Instaloader issue #2487](https://github.com/instaloader/instaloader/issues/2487).
@@ -160,7 +161,7 @@ created by an older InstaSync image, remove it and recreate it after updating
 the container:
 
 ```bash
-rm -f /mnt/user/appdata/instasync/session-hallveticapro
+rm -f /mnt/user/appdata/instasync/session-your-instagram-username
 ```
 
 You can verify that the recreated file contains a usable session ID without
@@ -168,16 +169,56 @@ printing the secret:
 
 ```bash
 docker exec InstaSync python -c \
-  "import pickle; data=pickle.load(open('/data/session-hallveticapro','rb')); print('sessionid present:', bool(data.get('sessionid')))"
+  "import pickle; data=pickle.load(open('/data/session-your-instagram-username','rb')); print('sessionid present:', bool(data.get('sessionid')))"
 ```
 
 If Instagram still rejects Instaloader's interactive login, create the session
 from browser cookies instead. Log in to Instagram in a browser, open its
-developer tools, and copy the Instagram-domain cookie values. Then run:
+developer tools, and copy the Instagram-domain cookie values.
+
+#### Copy Browser Cookies
+
+> [!WARNING]
+> Treat the `sessionid` cookie like a password. Anyone who obtains it may be able
+> to access your Instagram account. Use a trusted computer, never paste cookie
+> values into an issue or chat message, and delete temporary secret files after
+> importing them.
+
+First, sign in to [instagram.com](https://www.instagram.com/) with the account
+that InstaSync should use and leave that tab open.
+
+For Chrome, Chromium, or Microsoft Edge:
+
+1. Open developer tools with `F12`, `Ctrl+Shift+I` on Windows or Linux, or
+   `Cmd+Option+I` on macOS.
+2. Select the **Application** tab. If it is hidden, open the `>>` overflow menu.
+3. In the left sidebar, expand **Storage**, then **Cookies**.
+4. Select `https://www.instagram.com`.
+5. Copy the **Value** for `sessionid`. Also copy `csrftoken`, `ds_user_id`,
+   `mid`, and `ig_did` when present.
+
+For Firefox:
+
+1. Open developer tools with `F12`, `Ctrl+Shift+I` on Windows or Linux, or
+   `Cmd+Option+I` on macOS.
+2. Select the **Storage** tab.
+3. In the left sidebar, expand **Cookies** and select
+   `https://www.instagram.com`.
+4. Copy the **Value** for `sessionid`. Also copy `csrftoken`, `ds_user_id`,
+   `mid`, and `ig_did` when present.
+
+The required cookie is `sessionid`. Supplying the optional cookies gives
+Instagram more of the browser session context.
+
+The browser navigation above follows the official
+[Chrome DevTools cookie guide](https://developer.chrome.com/docs/devtools/application/cookies)
+and [Firefox Storage Inspector guide](https://firefox-source-docs.mozilla.org/devtools-user/storage_inspector/cookies/).
+
+For an interactive import, run:
 
 ```bash
 docker exec -it InstaSync python scripts/import_instagram_session.py \
-  --output=/data/session-hallveticapro
+  --output=/data/session-your-instagram-username
 ```
 
 Paste the required `sessionid` when prompted. The helper also accepts optional
@@ -194,17 +235,29 @@ docker exec \
   InstaSync \
   python scripts/import_instagram_session.py \
   --from-env \
-  --output=/data/session-hallveticapro
+  --output=/data/session-your-instagram-username
 ```
 
 The optional environment variables are `INSTAGRAM_DS_USER_ID`, `INSTAGRAM_MID`,
 and `INSTAGRAM_IG_DID`. You can also mount a JSON secret file containing the
-cookie names and values, then run:
+cookie names and values. Create the temporary file on the Unraid host:
+
+```bash
+cat > /mnt/user/appdata/instasync/instagram-cookies.json <<'JSON'
+{
+  "sessionid": "paste-sessionid-value-here"
+}
+JSON
+
+chmod 600 /mnt/user/appdata/instasync/instagram-cookies.json
+```
+
+Add any available optional cookies as additional JSON fields. Then run:
 
 ```bash
 docker exec InstaSync python scripts/import_instagram_session.py \
   --cookies-json-file=/data/instagram-cookies.json \
-  --output=/data/session-hallveticapro
+  --output=/data/session-your-instagram-username
 ```
 
 If the main container cannot stay running because an older session file is
@@ -214,10 +267,10 @@ invalid, use a one-shot container against the same Unraid appdata directory:
 docker run --rm \
   --volume /mnt/user/appdata/instasync:/data \
   --entrypoint python \
-  ghcr.io/hallveticapro/instasync:latest \
+  ghcr.io/your-github-user/your-repository:latest \
   scripts/import_instagram_session.py \
   --cookies-json-file=/data/instagram-cookies.json \
-  --output=/data/session-hallveticapro
+  --output=/data/session-your-instagram-username
 ```
 
 Delete the temporary JSON secret file after importing it.
@@ -232,8 +285,8 @@ the same `/data` session path explicitly:
 ```bash
 docker exec -it InstaSync \
   instaloader \
-  --login=hallveticapro \
-  --sessionfile=/data/session-hallveticapro \
+  --login=your-instagram-username \
+  --sessionfile=/data/session-your-instagram-username \
   instagram
 ```
 
@@ -241,7 +294,7 @@ Confirm that the file exists on the Unraid host before editing or recreating the
 container:
 
 ```bash
-ls -l /mnt/user/appdata/instasync/session-hallveticapro
+ls -l /mnt/user/appdata/instasync/session-your-instagram-username
 ```
 
 The loaded cookies authenticate the primary Instaloader lookup and the
@@ -251,13 +304,13 @@ Then edit the Unraid container and add:
 
 | Variable | Value |
 | --- | --- |
-| `INSTAGRAM_USERNAME` | `hallveticapro` |
-| `INSTALOADER_SESSION_FILE` | `/data/session-hallveticapro` |
+| `INSTAGRAM_USERNAME` | `your-instagram-username` |
+| `INSTALOADER_SESSION_FILE` | `/data/session-your-instagram-username` |
 
 Apply the container update and check the logs for:
 
 ```text
-Loaded Instaloader session for hallveticapro
+Loaded Instaloader session for your-instagram-username
 ```
 
 You can also verify the loaded state without relying on log history:

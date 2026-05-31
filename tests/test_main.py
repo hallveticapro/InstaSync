@@ -330,15 +330,15 @@ def test_instaloader_resolver_uses_best_profile_picture_url(
 
 def test_instaloader_resolver_loads_configured_session_file(tmp_path: Path) -> None:
     loader = FakeLoader()
-    session_file = tmp_path / "session-hallveticapro"
+    session_file = tmp_path / "session-exampleuser"
 
     InstaloaderProfileResolver(
         loader=loader,
-        instagram_username="hallveticapro",
+        instagram_username="exampleuser",
         session_file=session_file,
     )
 
-    assert loader.load_session_calls == [("hallveticapro", str(session_file))]
+    assert loader.load_session_calls == [("exampleuser", str(session_file))]
 
 
 def test_instaloader_resolver_rejects_session_without_sessionid(tmp_path: Path) -> None:
@@ -348,16 +348,16 @@ def test_instaloader_resolver_rejects_session_without_sessionid(tmp_path: Path) 
     with pytest.raises(RuntimeError, match="Unable to load Instaloader session file"):
         InstaloaderProfileResolver(
             loader=loader,
-            instagram_username="hallveticapro",
-            session_file=tmp_path / "session-hallveticapro",
+            instagram_username="exampleuser",
+            session_file=tmp_path / "session-exampleuser",
         )
 
 
 def test_healthcheck_reports_loaded_instaloader_session(tmp_path: Path) -> None:
     resolver = InstaloaderProfileResolver(
         loader=FakeLoader(),
-        instagram_username="hallveticapro",
-        session_file=tmp_path / "session-hallveticapro",
+        instagram_username="exampleuser",
+        session_file=tmp_path / "session-exampleuser",
     )
     client = TestClient(create_app(Settings(cache_dir=tmp_path), FakeSession([]), resolver))
 
@@ -375,8 +375,8 @@ def test_loaded_instaloader_session_authenticates_fallback_requests(
 ) -> None:
     resolver = InstaloaderProfileResolver(
         loader=FakeLoader(),
-        instagram_username="hallveticapro",
-        session_file=tmp_path / "session-hallveticapro",
+        instagram_username="exampleuser",
+        session_file=tmp_path / "session-exampleuser",
     )
     session = FakeSession([metadata_response()])
     service = ProfileImageService(Settings(cache_dir=tmp_path), session, resolver)
@@ -392,7 +392,7 @@ def test_loaded_instaloader_session_authenticates_fallback_requests(
 
 def test_settings_require_session_username_and_file_together(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="must be configured together"):
-        Settings(cache_dir=tmp_path, instagram_username="hallveticapro")
+        Settings(cache_dir=tmp_path, instagram_username="exampleuser")
 
 
 def test_instaloader_private_profile_does_not_use_fallback(tmp_path: Path) -> None:
