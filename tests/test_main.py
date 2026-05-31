@@ -151,6 +151,7 @@ def test_web_profile_info_hd_image_is_used_when_instaloader_fails(
     assert response.status_code == 200
     assert session.calls[0][0] == INSTAGRAM_PROFILE_INFO_URL
     assert session.calls[0][1]["params"] == {"username": "instagram"}
+    assert "Mobile Safari" in session.calls[0][1]["headers"]["User-Agent"]
     assert session.calls[1][0] == HD_URL
 
 

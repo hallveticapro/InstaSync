@@ -23,8 +23,8 @@ logger = logging.getLogger(__name__)
 INSTAGRAM_PROFILE_INFO_URL = "https://www.instagram.com/api/v1/users/web_profile_info/"
 DEFAULT_INSTAGRAM_APP_ID = "936619743392459"
 DEFAULT_USER_AGENT = (
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+    "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
 )
 USERNAME_PATTERN = re.compile(r"^(?!\.)(?!.*\.\.)(?!.*\.$)[a-z0-9._]{1,30}$")
 ALLOWED_IMAGE_HOST_SUFFIXES = ("cdninstagram.com", "fbcdn.net")

@@ -28,8 +28,9 @@ Instaloader's highest-quality `Profile.profile_pic_url` exactly as returned. If
 Instaloader cannot resolve the profile, InstaSync falls back to Instagram's
 undocumented `web_profile_info` endpoint. The compatibility fallback prefers
 `profile_pic_url_hd` and uses `profile_pic_url` only when the HD field is absent.
-When a session file is configured, both adapters use its cookies. Signed CDN
-URLs are never rewritten.
+It identifies itself with an Android mobile user agent to avoid frontend
+redirect behavior. When a session file is configured, both adapters use its
+cookies. Signed CDN URLs are never rewritten.
 
 Responses include an `X-Cache` header:
 
