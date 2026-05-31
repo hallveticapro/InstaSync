@@ -185,6 +185,28 @@ Paste the required `sessionid` when prompted. The helper also accepts optional
 cookies are stored with private file permissions, and secrets are not placed in
 your shell history.
 
+For a headless import, inject cookie values through environment variables:
+
+```bash
+docker exec \
+  --env INSTAGRAM_SESSIONID \
+  --env INSTAGRAM_CSRFTOKEN \
+  InstaSync \
+  python scripts/import_instagram_session.py \
+  --from-env \
+  --output=/data/session-hallveticapro
+```
+
+The optional environment variables are `INSTAGRAM_DS_USER_ID`, `INSTAGRAM_MID`,
+and `INSTAGRAM_IG_DID`. You can also mount a JSON secret file containing the
+cookie names and values, then run:
+
+```bash
+docker exec InstaSync python scripts/import_instagram_session.py \
+  --cookies-json-file=/data/instagram-cookies.json \
+  --output=/data/session-hallveticapro
+```
+
 Do not add a profile target to this one-time login command. For example,
 `instaloader instagram` is an anonymous profile download, not a session setup
 check, and Instagram may reject its GraphQL request with `403 Forbidden`.
