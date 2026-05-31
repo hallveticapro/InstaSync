@@ -1,0 +1,10 @@
+services:
+  instasync:
+    image: ghcr.io/hallveticapro/instasync:latest
+    container_name: InstaSync
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    volumes:
+      - /mnt/user/appdata/instasync:/data
+

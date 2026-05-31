@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Container version="2">
+  <Name>InstaSync</Name>
+  <Repository>ghcr.io/hallveticapro/instasync:latest</Repository>
+  <Registry>https://github.com/hallveticapro/InstaSync/pkgs/container/instasync</Registry>
+  <Network>bridge</Network>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/hallveticapro/InstaSync/issues</Support>
+  <Project>https://github.com/hallveticapro/InstaSync</Project>
+  <Overview>Self-hosted Instagram profile-picture API for Apple Shortcuts. Cache data and optional Instaloader session cookies persist under /data.</Overview>
+  <Category>Tools:</Category>
+  <WebUI>http://[IP]:[PORT:9000]/healthz</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/hallveticapro/InstaSync/main/unraid/instasync.xml</TemplateURL>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <Config Name="Web Port" Target="9000" Default="9000" Mode="tcp" Description="HTTP API port." Type="Port" Display="always" Required="true" Mask="false">9000</Config>
+  <Config Name="Persistent Appdata" Target="/data" Default="/mnt/user/appdata/instasync" Mode="rw" Description="Persistent cache and Instaloader session-cookie storage. Keep this mapped to /mnt/user/appdata/instasync on Unraid." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/instasync</Config>
+  <Config Name="Instagram Username" Target="INSTAGRAM_USERNAME" Default="" Mode="" Description="Optional account used with a persisted Instaloader session file. Set together with Instaloader Session File." Type="Variable" Display="always" Required="false" Mask="false"/>
+  <Config Name="Instaloader Session File" Target="INSTALOADER_SESSION_FILE" Default="" Mode="" Description="Optional session-cookie path inside the container, such as /data/session-hallveticapro. Set together with Instagram Username." Type="Variable" Display="always" Required="false" Mask="false"/>
+</Container>
+

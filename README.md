@@ -83,7 +83,15 @@ workflow run:
 
 ## Deploy On Unraid
 
-In the Unraid WebGUI, open **Docker** and add a container with these settings:
+Create the persistent host directory from the Unraid terminal:
+
+```bash
+mkdir -p /mnt/user/appdata/instasync
+chown -R 99:100 /mnt/user/appdata/instasync
+```
+
+In the Unraid WebGUI, open **Docker** and add or edit the container with these
+settings:
 
 | Setting | Value |
 | --- | --- |
@@ -95,6 +103,25 @@ In the Unraid WebGUI, open **Docker** and add a container with these settings:
 | Container Path | `/data` |
 | Host Path | `/mnt/user/appdata/instasync` |
 | Access Mode | `Read/Write` |
+
+The `/data` mapping is required. It stores the image cache and the optional
+Instaloader session file outside the container so both survive image updates and
+container recreation. The repository also includes an
+[Unraid template](unraid/instasync.xml) with this mapping preconfigured.
+
+Apply the container configuration, then verify the live bind mount from the
+Unraid terminal:
+
+```bash
+docker inspect InstaSync \
+  --format '{{range .Mounts}}{{println .Source "->" .Destination}}{{end}}'
+```
+
+The output must include:
+
+```text
+/mnt/user/appdata/instasync -> /data
+```
 
 Enable auto-start after confirming the health check passes. If the container
 logs show cache-directory permission errors, ensure the appdata directory is
@@ -110,7 +137,8 @@ curl -o profile.jpg http://<unraid-ip>:9000/insta/instagram
 ### Configure An Instaloader Session
 
 Anonymous Instagram requests can be rate-limited aggressively. If the container
-logs show Instagram `429` responses, create a logged-in Instaloader session once:
+logs show Instagram `429` responses, first verify the `/data` bind mount as
+described above. Then create a logged-in Instaloader session once:
 
 ```bash
 docker exec -it InstaSync \
@@ -122,6 +150,13 @@ docker exec -it InstaSync \
 Enter the password and two-factor code interactively if prompted. Instaloader
 stores session cookies in `/mnt/user/appdata/instasync/session-hallveticapro`
 through the existing `/data` volume mapping.
+
+Confirm that the file exists on the Unraid host before editing or recreating the
+container:
+
+```bash
+ls -l /mnt/user/appdata/instasync/session-hallveticapro
+```
 
 The loaded cookies authenticate the primary Instaloader lookup and the
 `web_profile_info` compatibility fallback.
@@ -141,6 +176,20 @@ Loaded Instaloader session for hallveticapro
 
 Do not publish or share the session file. If Instagram expires the session,
 repeat the one-time `docker exec` command.
+
+If a session file was previously created before `/data` was mapped to
+`/mnt/user/appdata/instasync`, recreate it after adding the mapping. Files stored
+only inside an old container or anonymous Docker volume are not copied into the
+new host directory automatically.
+
+### Docker Compose Alternative
+
+The included [`compose.yaml`](compose.yaml) encodes the same required bind mount:
+
+```yaml
+volumes:
+  - /mnt/user/appdata/instasync:/data
+```
 
 ## Expose With Nginx Proxy Manager
 
