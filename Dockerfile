@@ -5,6 +5,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+COPY scripts ./scripts
+RUN python scripts/patch_instaloader_login.py
+
 COPY app ./app
 
 RUN if ! getent group 100 >/dev/null; then groupadd --gid 100 instasync; fi \

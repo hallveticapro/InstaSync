@@ -136,8 +136,8 @@ class InstaloaderProfileResolver:
                     filename=str(session_file),
                 )
                 self._session_cookies = self.loader.save_session()
-                if not self._session_cookies:
-                    raise ValueError("session file did not contain cookies")
+                if not self._session_cookies.get("sessionid"):
+                    raise ValueError("session file did not contain a usable sessionid cookie")
             except Exception as exc:
                 raise RuntimeError(
                     f"Unable to load Instaloader session file: {session_file}"

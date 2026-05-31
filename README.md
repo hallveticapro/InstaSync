@@ -152,6 +152,39 @@ Enter the password and two-factor code interactively if prompted. Instaloader
 stores session cookies in `/mnt/user/appdata/instasync/session-hallveticapro`
 through the existing `/data` volume mapping.
 
+The image includes a compatibility patch for
+[Instaloader issue #2487](https://github.com/instaloader/instaloader/issues/2487).
+Unpatched Instaloader versions can save an empty `sessionid` cookie after login,
+causing persistent `401 Unauthorized` responses. If your session file was
+created by an older InstaSync image, remove it and recreate it after updating
+the container:
+
+```bash
+rm -f /mnt/user/appdata/instasync/session-hallveticapro
+```
+
+You can verify that the recreated file contains a usable session ID without
+printing the secret:
+
+```bash
+docker exec InstaSync python -c \
+  "import pickle; data=pickle.load(open('/data/session-hallveticapro','rb')); print('sessionid present:', bool(data.get('sessionid')))"
+```
+
+If Instagram still rejects Instaloader's interactive login, create the session
+from browser cookies instead. Log in to Instagram in a browser, open its
+developer tools, and copy the Instagram-domain cookie values. Then run:
+
+```bash
+docker exec -it InstaSync python scripts/import_instagram_session.py \
+  --output=/data/session-hallveticapro
+```
+
+Paste the required `sessionid` when prompted. The helper also accepts optional
+`csrftoken`, `ds_user_id`, `mid`, and `ig_did` values. Prompts are hidden, the
+cookies are stored with private file permissions, and secrets are not placed in
+your shell history.
+
 Do not add a profile target to this one-time login command. For example,
 `instaloader instagram` is an anonymous profile download, not a session setup
 check, and Instagram may reject its GraphQL request with `403 Forbidden`.

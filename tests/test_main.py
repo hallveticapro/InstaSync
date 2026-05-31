@@ -341,6 +341,18 @@ def test_instaloader_resolver_loads_configured_session_file(tmp_path: Path) -> N
     assert loader.load_session_calls == [("hallveticapro", str(session_file))]
 
 
+def test_instaloader_resolver_rejects_session_without_sessionid(tmp_path: Path) -> None:
+    loader = FakeLoader()
+    loader.save_session = lambda: {"sessionid": ""}
+
+    with pytest.raises(RuntimeError, match="Unable to load Instaloader session file"):
+        InstaloaderProfileResolver(
+            loader=loader,
+            instagram_username="hallveticapro",
+            session_file=tmp_path / "session-hallveticapro",
+        )
+
+
 def test_healthcheck_reports_loaded_instaloader_session(tmp_path: Path) -> None:
     resolver = InstaloaderProfileResolver(
         loader=FakeLoader(),
